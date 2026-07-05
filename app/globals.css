@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #fbfbfd;
+  --foreground: #0f172a;
+}
+
+* {
+  border-color: theme('colors.slate.200');
+}
+
+html,
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle blurred "locked" treatment used in the preview paywall */
+.locked-blur {
+  filter: blur(7px);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Premium gradient text utility */
+.text-gradient {
+  background: linear-gradient(
+    90deg,
+    theme('colors.brand.600'),
+    theme('colors.brand.400')
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
