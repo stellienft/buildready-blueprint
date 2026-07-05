@@ -1,16 +1,13 @@
 -- =====================================================================
 -- BuildReady Blueprint — Database Schema
--- =====================================================================
--- Run this in the Supabase SQL editor (or `supabase db push`).
--- Designed for PostgreSQL 15+ (Supabase default).
+-- Matches the Next.js application code exactly.
 -- =====================================================================
 
--- Required extensions ------------------------------------------------
-create extension if not exists "pgcrypto";   -- gen_random_uuid()
-create extension if not exists "uuid-ossp";  -- uuid helper (optional)
+-- Required extensions
+create extension if not exists "pgcrypto";
 
 -- ---------------------------------------------------------------------
--- profiles  (1:1 with auth.users)
+-- profiles (1:1 with auth.users)
 -- ---------------------------------------------------------------------
 create table if not exists public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
@@ -30,64 +27,62 @@ comment on table public.profiles is 'User profile, 1:1 with auth.users.';
 create table if not exists public.projects (
   id                   uuid primary key default gen_random_uuid(),
   user_id              uuid not null references public.profiles(id) on delete cascade,
-  name                 text not null,
-  slug                 text not null,
-  status               text not null default 'draft'
-                       check (status in ('draft','questionnaire','preview','unlocked','expired')),
+  business_name        text not null,
+  business_type        text,
+  main_offer           text,
+  target_audience      text,
+  website_goal         text,
+  brand_style          text,
+  tone_of_voice        text,
+  colour_preferences   text,
+  existing_branding    text,
+  pages_needed         text[],
+  preferred_builder    text,
   questionnaire_data   jsonb,
-  preview_blueprint_id uuid,  -- fk added below (self/cross ref to blueprints)
-  blueprint_id         uuid,  -- full (unlocked) blueprint
-  stripe_session_id    text,
+  status               text not null default 'preview'
+                       check (status in ('preview','unlocked','expired')),
+  payment_status       text not null default 'pending'
+                       check (payment_status in ('pending','paid','failed')),
   created_at           timestamptz not null default now(),
-  updated_at           timestamptz not null default now(),
-  unique (user_id, slug)
+  updated_at           timestamptz not null default now()
 );
 
-comment on table public.projects is 'A user’s project; holds questionnaire answers and blueprint references.';
+comment on table public.projects is 'A user project; holds questionnaire answers and payment status.';
 
 -- ---------------------------------------------------------------------
 -- blueprints
 -- ---------------------------------------------------------------------
 create table if not exists public.blueprints (
-  id            uuid primary key default gen_random_uuid(),
-  project_id    uuid not null references public.projects(id) on delete cascade,
-  stage         text not null default 'preview'
-                check (stage in ('preview','full')),
-  content       jsonb not null,                  -- BlueprintJSON structure
-  model         text,                            -- e.g. 'gpt-4o'
-  tokens_used   integer,
-  is_locked     boolean not null default true,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  id                    uuid primary key default gen_random_uuid(),
+  project_id            uuid not null references public.projects(id) on delete cascade,
+  preview_json          jsonb,
+  full_blueprint_json   jsonb,
+  master_prompt         text,
+  bolt_prompt           text,
+  lovable_prompt        text,
+  framer_prompt         text,
+  webflow_prompt        text,
+  cursor_prompt         text,
+  created_at             timestamptz not null default now(),
+  updated_at             timestamptz not null default now()
 );
 
-comment on table public.blueprints is 'AI-generated blueprint artifacts (preview = locked, full = unlocked).';
-
--- Now wire the project → blueprint references (deferred to allow the cross-ref).
-alter table public.projects
-  add constraint projects_preview_blueprint_fk
-  foreign key (preview_blueprint_id) references public.blueprints(id) on delete set null;
-
-alter table public.projects
-  add constraint projects_blueprint_fk
-  foreign key (blueprint_id) references public.blueprints(id) on delete set null;
+comment on table public.blueprints is 'AI-generated blueprint with preview JSON and full blueprint JSON.';
 
 -- ---------------------------------------------------------------------
 -- payments
 -- ---------------------------------------------------------------------
 create table if not exists public.payments (
-  id                         uuid primary key default gen_random_uuid(),
-  project_id                 uuid not null references public.projects(id) on delete cascade,
-  user_id                    uuid not null references public.profiles(id) on delete cascade,
-  tier                       text not null check (tier in ('blueprint','pro')),
-  amount                     integer not null,           -- cents
-  currency                   text not null default 'usd',
-  status                     text not null default 'pending'
-                             check (status in ('pending','paid','failed','refunded')),
-  stripe_payment_intent_id   text,
-  stripe_session_id          text,
-  receipt_url                text,
-  paid_at                    timestamptz,
+  id                          uuid primary key default gen_random_uuid(),
+  user_id                     uuid not null references public.profiles(id) on delete cascade,
+  project_id                  uuid not null references public.projects(id) on delete cascade,
+  stripe_checkout_session_id  text,
+  stripe_payment_intent_id    text,
+  stripe_customer_id          text,
+  amount                      integer not null,  -- cents
+  currency                    text not null default 'aud',
+  status                      text not null default 'pending'
+                              check (status in ('pending','paid','failed','refunded')),
   created_at                  timestamptz not null default now(),
   updated_at                  timestamptz not null default now()
 );
@@ -99,11 +94,9 @@ comment on table public.payments is 'Stripe payment records tied to a project.';
 -- ---------------------------------------------------------------------
 create table if not exists public.downloads (
   id            uuid primary key default gen_random_uuid(),
-  project_id    uuid not null references public.projects(id) on delete cascade,
   user_id       uuid not null references public.profiles(id) on delete cascade,
-  blueprint_id  uuid not null references public.blueprints(id) on delete cascade,
-  format        text not null check (format in ('json','markdown','pdf')),
-  ip_address    inet,
+  project_id    uuid not null references public.projects(id) on delete cascade,
+  download_type text not null check (download_type in ('txt','json','pdf')),
   created_at    timestamptz not null default now()
 );
 
@@ -112,11 +105,12 @@ comment on table public.downloads is 'Audit log of blueprint downloads.';
 -- ---------------------------------------------------------------------
 -- Indexes
 -- ---------------------------------------------------------------------
-create index if not exists idx_projects_user_id          on public.projects(user_id);
-create index if not exists idx_projects_status           on public.projects(status);
-create index if not exists idx_blueprints_project_id     on public.blueprints(project_id);
-create index if not exists idx_payments_project_id        on public.payments(project_id);
-create index if not exists idx_payments_user_id           on public.payments(user_id);
-create index if not exists idx_payments_status           on public.payments(status);
-create index if not exists idx_downloads_user_id          on public.downloads(user_id);
-create index if not exists idx_downloads_blueprint_id     on public.downloads(blueprint_id);
+create index if not exists idx_projects_user_id       on public.projects(user_id);
+create index if not exists idx_projects_status        on public.projects(status);
+create index if not exists idx_projects_payment_status on public.projects(payment_status);
+create index if not exists idx_blueprints_project_id on public.blueprints(project_id);
+create index if not exists idx_payments_project_id   on public.payments(project_id);
+create index if not exists idx_payments_user_id      on public.payments(user_id);
+create index if not exists idx_payments_status       on public.payments(status);
+create index if not exists idx_downloads_user_id     on public.downloads(user_id);
+create index if not exists idx_downloads_project_id  on public.downloads(project_id);
