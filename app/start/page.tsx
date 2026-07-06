@@ -57,7 +57,7 @@ export default function StartPage() {
 
   const currentStep = steps[step]
   const isReview = step === steps.length
-  const currentValue = watch(currentStep.key as keyof FormData)
+  const currentValue = currentStep ? watch(currentStep.key as keyof FormData) : undefined
 
   const handleNext = () => {
     if (step < steps.length) {

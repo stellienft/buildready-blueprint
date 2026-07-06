@@ -24,7 +24,9 @@ export default async function PreviewPage({ params }: { params: Promise<{ projec
       const { data: bp } = await supabase.from('blueprints').select('*').eq('project_id', projectId).order('created_at', { ascending: false }).limit(1).single()
       if (bp) blueprint = bp.full_blueprint_json as unknown as BlueprintJSON
     }
-  } catch { notFound() }
+  } catch {
+    // Invalid project ID or guest preview — fall through to mock
+  }
 
   // Guest preview from localStorage (passed via search params or mock)
   if (!blueprint) {
